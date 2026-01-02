@@ -8,7 +8,24 @@ import (
 )
 
 func main() {
-	cmd := exec.Command("/bin/bash")
+	if len(os.Args) < 2 {
+		panic("expected parent or child")
+	}
+
+	switch os.Args[1] {
+	case "parent":
+		parent()
+	case "child":
+		child()
+	default:
+		panic("unknown command")
+	}
+
+}
+
+// parent function invoked main program which sets up the namespace
+func parent() {
+	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
 	// The statements below refer to the input, output and error streams of the process created (cmd)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -40,8 +57,28 @@ func main() {
 		},
 	}
 
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Error running the /bin/bash command: %v\n", err)
-		os.Exit(1)
+	err := cmd.Run()
+	if err != nil {
+		fmt.Printf("E%s\n", err)
 	}
+}
+
+// this is the child process w copy of the parent program
+func child() {
+	cmd := exec.Command(os.Args[2], os.Args[3:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// the command below sets the h to myhost. Idea here is to show use of UTS namespace.
+	err := syscall.Sethostname([]byte("myhost"))
+	if err != nil {
+		fmt.Printf("E%s\n", err)
+	}
+
+	err = cmd.Run()
+	if err != nil {
+		fmt.Printf("E%s\n", err)
+	}
+
 }

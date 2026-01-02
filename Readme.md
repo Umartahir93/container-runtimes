@@ -1,7 +1,8 @@
+
 # Linux Namespace Sandbox (Go)
 
-This project demonstrates how to create an isolated Linux process using **multiple namespaces** in Go.
-It launches an interactive `/bin/bash` shell inside newly created namespaces, similar to how container runtimes (like Docker) bootstrap containers.
+This project demonstrates how to create a **minimal isolated Linux process** using **multiple namespaces** in Go.
+It launches a child process that can run any command (typically `/bin/bash`) inside newly created namespaces, similar to how container runtimes (like Docker) bootstrap containers.
 
 ---
 
@@ -9,12 +10,13 @@ It launches an interactive `/bin/bash` shell inside newly created namespaces, si
 
 This Go program:
 
-* Spawns a child process (`/bin/bash`)
-* Creates **new Linux namespaces** for that process
-* Maps the current user to **root inside the namespace**
-* Provides process-level isolation without requiring host root access
+* Acts as a **parent process** that sets up Linux namespaces
+* Re-executes itself to spawn a **child process** in the new namespaces
+* Creates **new Linux namespaces** for isolation
+* Maps the current user to **root inside the namespace** using user namespaces
+* Allows the child process to set its **hostname** independently of the host
 
-The result is a shell that appears to run as **root**, but is safely isolated from the host system.
+The result is a shell or command that behaves as **root** inside the namespaces but is safely isolated from the host system.
 
 ---
 
@@ -22,17 +24,17 @@ The result is a shell that appears to run as **root**, but is safely isolated fr
 
 The program creates the following namespaces:
 
-| Namespace                  | Purpose                                                  |
-| -------------------------- | -------------------------------------------------------- |
-| **UTS** (`CLONE_NEWUTS`)   | Isolates hostname and domain name                        |
-| **PID** (`CLONE_NEWPID`)   | Provides a new process ID space (PID 1 inside container) |
-| **Mount** (`CLONE_NEWNS`)  | Gives a separate mount table                             |
-| **IPC** (`CLONE_NEWIPC`)   | Isolates System V IPC and POSIX message queues           |
-| **User** (`CLONE_NEWUSER`) | Allows UID/GID remapping (root inside namespace)         |
+| Namespace                  | Purpose                                                    |
+| -------------------------- | ---------------------------------------------------------- |
+| **UTS** (`CLONE_NEWUTS`)   | Isolates hostname and domain name                          |
+| **PID** (`CLONE_NEWPID`)   | Provides a new process ID space (child process sees PID 1) |
+| **Mount** (`CLONE_NEWNS`)  | Gives a separate mount table                               |
+| **IPC** (`CLONE_NEWIPC`)   | Isolates System V IPC and POSIX message queues             |
+| **User** (`CLONE_NEWUSER`) | Allows UID/GID remapping (root inside namespace)           |
 
 ---
 
-## User Namespace & UID Mapping
+## User Namespace & UID/GID Mapping
 
 The program maps:
 
@@ -45,46 +47,32 @@ This allows the process to:
 
 * Act as **root inside the namespace**
 * Remain **unprivileged on the host**
-* Safely create other namespaces without compromising system security
-
-This is a key mechanism used by modern container runtimes.
+* Create additional namespaces safely
 
 ---
 
 ## How It Works (High-Level Flow)
 
 ```
-Go Parent Process
-└─ fork + clone (with namespace flags)
-   └─ execve("/bin/bash")
-      └─ Bash runs in isolated namespaces
+Parent Go Process
+└─ exec /proc/self/exe "child" with namespace flags
+   └─ Child sets hostname
+   └─ Executes command (e.g., /bin/bash) in isolated namespaces
 ```
 
-The Go process acts as the **parent**, and `/bin/bash` runs as a **child process** inside new namespaces.
+* **Parent process:** sets up all namespace flags and UID/GID mappings
+* **Child process:** runs inside the isolated namespaces, sets hostname, and executes the intended command
 
 ---
 
-## What This Program Does NOT Do
-
-This program **does not**:
-
-* Change the root filesystem (`chroot` or `pivot_root`)
-* Isolate the filesystem contents
-* Provide network isolation
-* Act as a full container runtime
-
-Because of this, files on the host filesystem are still visible and accessible (subject to permissions).
-
----
-
-## Expected Behavior
+## Example Behavior
 
 Inside the namespace shell:
 
 ```bash
 whoami        # root
 id            # uid=0
-ps            # PID 1 is bash
+ps            # PID 1 is the shell
 hostname      # can be changed without affecting host
 ```
 
@@ -95,14 +83,26 @@ On the host:
 
 ---
 
-## Why This Is Useful
+## Features Demonstrated
 
-This program is a **minimal educational example** showing:
+* Linux namespaces for isolation
+* Re-executing the current binary (`/proc/self/exe`) to implement **parent/child roles**
+* Child process hostname isolation using UTS namespace
+* Minimal container-like behavior without full container runtime setup
+* Rootless UID/GID mapping using user namespaces
 
-* How Linux namespaces work
-* How containers begin their lifecycle
-* How user namespaces enable rootless containers
-* The building blocks behind Docker, containerd, and runc
+---
+
+## What This Program Does NOT Do
+
+This program **does not**:
+
+* Change the root filesystem (`chroot` or `pivot_root`)
+* Provide full filesystem isolation
+* Provide network isolation
+* Enforce cgroup-based resource limits
+
+It is intended **only as an educational example**.
 
 ---
 
@@ -110,32 +110,34 @@ This program is a **minimal educational example** showing:
 
 * Linux kernel with `unprivileged_userns_clone=1`
 * Go installed (Go 1.18+ recommended)
-* No root privileges required
+* Root privileges are **optional** but may be needed for some namespace operations
 
 ---
 
 ## Build & Run
 
+Build the program:
+
 ```bash
-go build -o mynamespaces
-./mynamespaces
+go build -o myuts
 ```
+
+Run the program as root (or unprivileged if your kernel allows user namespaces):
+
+```bash
+sudo ./myuts parent /bin/bash
+```
+
+* `parent` → triggers the parent process logic
+* `/bin/bash` → command executed in the child process inside isolated namespaces
 
 ---
 
 ## Next Steps
 
-To turn this into a real container runtime, you would add:
+To extend this into a **full container runtime**, we could add:
 
-* Mount propagation isolation
-* `pivot_root` or `chroot`
-* `/proc` mounting
-* Network namespace setup
-* Cgroups for resource limits
-
----
-
-## Disclaimer
-
-This project is for **learning purposes only**.
-It is **not a secure container runtime** and should not be used in production.
+* Mount propagation and `pivot_root` isolation
+* `/proc` and `/sys` filesystem setup
+* Network namespace isolation
+* Cgroup support for CPU, memory, and I/O limits
