@@ -1,8 +1,8 @@
-
-# Linux Namespace Sandbox (Go)
+# Linux Namespace Sandbox & Minimal RootFS (Go)
 
 This project demonstrates how to create a **minimal isolated Linux process** using **multiple namespaces** in Go.
-It launches a child process that can run any command (typically `/bin/bash`) inside newly created namespaces, similar to how container runtimes (like Docker) bootstrap containers.
+It launches a child process that can run **any command** inside newly created namespaces, similar to how container runtimes (like Docker or runc) bootstrap containers.
+The program also implements a **pivot_root** operation to isolate the filesystem.
 
 ---
 
@@ -14,15 +14,15 @@ This Go program:
 * Re-executes itself to spawn a **child process** in the new namespaces
 * Creates **new Linux namespaces** for isolation
 * Maps the current user to **root inside the namespace** using user namespaces
-* Allows the child process to set its **hostname** independently of the host
+* Sets a **hostname** inside the child namespace
+* Changes the root filesystem of the child using **pivot_root**
+  (the child only sees the contents of `rootfs` after pivot)
 
-The result is a shell or command that behaves as **root** inside the namespaces but is safely isolated from the host system.
+The result is a command (e.g., shell) that behaves as **root** inside the isolated namespaces but is safely contained from the host system.
 
 ---
 
 ## Namespaces Used
-
-The program creates the following namespaces:
 
 | Namespace                  | Purpose                                                    |
 | -------------------------- | ---------------------------------------------------------- |
@@ -43,11 +43,23 @@ Container UID 0 (root)
 → Host UID <current user>
 ```
 
-This allows the process to:
+This allows the child process to:
 
 * Act as **root inside the namespace**
 * Remain **unprivileged on the host**
-* Create additional namespaces safely
+* Safely create additional namespaces without compromising host security
+
+---
+
+## Pivot Root (Filesystem Isolation)
+
+The child process performs a **pivot_root** into a `rootfs` directory:
+
+* The child sees `rootfs` as `/`
+* The original host root is hidden at `/.pivot_root` temporarily
+* After unmounting `/.pivot_root`, the host filesystem is no longer visible from inside the container
+
+> ⚠️ Make sure `rootfs` contains the binaries you want to run (e.g., `/bin/sh` for BusyBox). Bash may not exist in minimal root filesystems.
 
 ---
 
@@ -57,11 +69,12 @@ This allows the process to:
 Parent Go Process
 └─ exec /proc/self/exe "child" with namespace flags
    └─ Child sets hostname
-   └─ Executes command (e.g., /bin/bash) in isolated namespaces
+   └─ Performs pivot_root to rootfs
+   └─ Executes intended command (e.g., /bin/sh)
 ```
 
 * **Parent process:** sets up all namespace flags and UID/GID mappings
-* **Child process:** runs inside the isolated namespaces, sets hostname, and executes the intended command
+* **Child process:** runs inside isolated namespaces, sets hostname, pivots root, and executes the command
 
 ---
 
@@ -71,38 +84,15 @@ Inside the namespace shell:
 
 ```bash
 whoami        # root
-id            # uid=0
+id            # uid=0 (mapped from host user)
 ps            # PID 1 is the shell
-hostname      # can be changed without affecting host
+hostname      # shows "myhost"
 ```
 
 On the host:
 
 * Host processes and hostname remain unchanged
-* Filesystem is shared unless further isolation is added
-
----
-
-## Features Demonstrated
-
-* Linux namespaces for isolation
-* Re-executing the current binary (`/proc/self/exe`) to implement **parent/child roles**
-* Child process hostname isolation using UTS namespace
-* Minimal container-like behavior without full container runtime setup
-* Rootless UID/GID mapping using user namespaces
-
----
-
-## What This Program Does NOT Do
-
-This program **does not**:
-
-* Change the root filesystem (`chroot` or `pivot_root`)
-* Provide full filesystem isolation
-* Provide network isolation
-* Enforce cgroup-based resource limits
-
-It is intended **only as an educational example**.
+* Host filesystem remains intact and isolated from child after pivot
 
 ---
 
@@ -110,7 +100,7 @@ It is intended **only as an educational example**.
 
 * Linux kernel with `unprivileged_userns_clone=1`
 * Go installed (Go 1.18+ recommended)
-* Root privileges are **optional** but may be needed for some namespace operations
+* Root privileges are **optional**, but some operations (like mount or certain pivot_root setups) may require root
 
 ---
 
@@ -119,25 +109,57 @@ It is intended **only as an educational example**.
 Build the program:
 
 ```bash
-go build -o myuts
+go build -o mynamespaces
 ```
 
-Run the program as root (or unprivileged if your kernel allows user namespaces):
+Prepare a minimal root filesystem (example with BusyBox):
 
 ```bash
-sudo ./myuts parent /bin/bash
+mkdir -p rootfs/{bin,proc,sys,dev,tmp}
+cp /usr/bin/busybox rootfs/bin/
+cd rootfs/bin && ./busybox --install .
+```
+
+Run the program:
+
+```bash
+sudo ./mynamespaces parent /bin/sh
 ```
 
 * `parent` → triggers the parent process logic
-* `/bin/bash` → command executed in the child process inside isolated namespaces
+* `/bin/sh` → command executed inside isolated namespaces (use `/bin/sh` for BusyBox rootfs)
+
+---
+
+## Features Demonstrated
+
+* Linux namespaces for process and resource isolation
+* User namespace with UID/GID mapping for rootless containers
+* Child process hostname isolation using UTS namespace
+* Filesystem isolation using **pivot_root**
+* Running a shell or arbitrary command inside isolated namespaces
+
+---
+
+## What This Program Does NOT Do
+
+This program **does not**:
+
+* Set up networking namespaces
+* Mount `/proc` or `/sys` automatically
+* Apply cgroup-based resource limits
+* Provide a full container runtime
+
+It is intended **only as an educational example** for understanding Linux namespaces and minimal container isolation.
 
 ---
 
 ## Next Steps
 
-To extend this into a **full container runtime**, we could add:
+To extend this into a **full container runtime**, we will add:
 
-* Mount propagation and `pivot_root` isolation
-* `/proc` and `/sys` filesystem setup
-* Network namespace isolation
-* Cgroup support for CPU, memory, and I/O limits
+* Mount propagation and full filesystem setup (`/proc`, `/sys`)
+* Networking namespace and virtual interfaces
+* PID 1 signal handling for child processes
+* Resource control using cgroups (CPU, memory, I/O)
+* Integration with a container image (like BusyBox or Alpine)

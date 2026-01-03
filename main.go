@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
@@ -76,9 +77,60 @@ func child() {
 		fmt.Printf("E%s\n", err)
 	}
 
+	rootfs, err := filepath.Abs("./rootfs")
+	if err != nil {
+		fmt.Printf("E%s\n", err)
+	}
+
+	if err = pivotRoot(rootfs); err != nil {
+		fmt.Printf("pivot-root E%s\n", err)
+		os.Exit(1)
+	}
+
 	err = cmd.Run()
 	if err != nil {
 		fmt.Printf("E%s\n", err)
 	}
 
+}
+
+func pivotRoot(newRoot string) error {
+	// Ensure new root is a mount point
+	if err := syscall.Mount(
+		newRoot,
+		newRoot,
+		"",
+		syscall.MS_BIND|syscall.MS_REC,
+		"",
+	); err != nil {
+		return err
+	}
+
+	putOld := filepath.Join(newRoot, ".pivot_root")
+
+	// create directory to put old root
+	if err := os.Mkdir(putOld, 0777); err != nil {
+		return err
+	}
+
+	// perform pivot root
+	if err := syscall.PivotRoot(newRoot, putOld); err != nil {
+		return err
+	}
+
+	// change working directory to new root
+	if err := os.Chdir("/"); err != nil {
+		return err
+	}
+
+	putOld = "/.pivot_root"
+	if err := syscall.Unmount(putOld, syscall.MNT_DETACH); err != nil {
+		return err
+	}
+
+	if err := os.Remove(putOld); err != nil {
+		return err
+	}
+
+	return nil
 }
