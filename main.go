@@ -87,9 +87,14 @@ func child() {
 		os.Exit(1)
 	}
 
+	if err = mountProc(); err != nil {
+		fmt.Printf("mount Proc%s\n", err)
+		os.Exit(1)
+	}
+
 	err = cmd.Run()
 	if err != nil {
-		fmt.Printf("E%s\n", err)
+		fmt.Printf("CMD %s\n", err)
 	}
 
 }
@@ -132,5 +137,19 @@ func pivotRoot(newRoot string) error {
 		return err
 	}
 
+	return nil
+}
+
+func mountProc() error {
+	source := "proc"
+	target := "/proc"
+
+	if err := os.MkdirAll(target, 0755); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount(source, target, "proc", 0, ""); err != nil {
+		return err
+	}
 	return nil
 }
