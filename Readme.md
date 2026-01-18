@@ -129,6 +129,19 @@ sudo ./mynamespaces parent /bin/sh
 * `parent` → triggers the parent process logic
 * `/bin/sh` → command executed inside isolated namespaces (use `/bin/sh` for BusyBox rootfs)
 
+### 🍎 Running on macOS
+Since macOS doesn't support Linux namespaces, use Colima/Docker with this alias to cross-compile and run your code in a privileged Linux environment:
+
+```bash
+# Add this alias to your shell
+alias run-linux-go='GOOS=linux GOARCH=arm64 go build -o mynamespaces main.go && docker run --privileged -it -v $(pwd):/app -w /app golang:1.23'
+```
+
+```bash
+# Execute your container code
+run-linux-go ./mynamespaces parent /bin/sh
+```
+
 ---
 
 ## Features Demonstrated
