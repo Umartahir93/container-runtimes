@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="ALL" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="cae8a152-a054-4a29-9adf-2356d47522bf" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/ld-linux-x86-64.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libc.so.6" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libm.so.6" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnsl.so.1" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnss_compat.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnss_dns.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnss_files.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnss_hesiod.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnss_nis.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libnss_nisplus.so.2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rootfs/lib64/libresolv.so.2" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/Readme.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mynamespaces" beforeDir="false" afterPath="$PROJECT_DIR$/mynamespaces" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rootfs/lib64" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="GOROOT" url="file:///opt/homebrew/opt/go/libexec" />
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 0
+}]]></component>
+  <component name="ProjectId" id="38OdYWHBAsfTNUv8Unk6wvOsnL8" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Go Build.go build github.com/umartahir93/customcontainers.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.GoLinterPluginOnboardingV2": "true",
+    "RunOnceActivity.GoLinterPluginStorageMigration": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.go.formatter.settings.were.checked": "true",
+    "RunOnceActivity.go.modules.go.list.on.any.changes.was.set": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "update-the-file-system",
+    "go.sdk.automatically.set": "true",
+    "junie.onboarding.icon.badge.shown": "true",
+    "last_opened_file_path": "/Users/umartahir/Development/container-runtimes/rootfs",
+    "node.js.detected.package.eslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "Runtime.Targets.Configurable",
+    "to.speed.mode.migration.done": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/rootfs" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="go build github.com/umartahir93/customcontainers" type="GoApplicationRunConfiguration" factoryName="Go Application" temporary="true" nameIsGenerated="true">
+      <module name="container-runtimes" />
+      <target name="golang:latest" />
+      <working_directory value="$PROJECT_DIR$" />
+      <parameters value="parent /bin/sh" />
+      <kind value="PACKAGE" />
+      <package value="github.com/umartahir93/customcontainers" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$/main.go" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Go Build.go build github.com/umartahir93/customcontainers" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-gosdk-72a9cf600ed8-dfa3e7267ae0-org.jetbrains.plugins.go.sharedIndexes.bundled-GO-253.29346.255" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-GO-253.29346.255" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="cae8a152-a054-4a29-9adf-2356d47522bf" name="Changes" comment="" />
+      <created>1768674598313</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1768674598313</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

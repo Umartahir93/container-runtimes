@@ -71,6 +71,10 @@ func child() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	// This line tells the new shell how to look:
+	// \u = username, \h = hostname, \w = current directory
+	cmd.Env = []string{"PS1=\\u@\\h:\\w# "}
+
 	// the command below sets the h to myhost. Idea here is to show use of UTS namespace.
 	err := syscall.Sethostname([]byte("myhost"))
 	if err != nil {
