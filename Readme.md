@@ -1,8 +1,7 @@
-# Linux Namespace Sandbox & Minimal RootFS (Go)
+# Minimal Rootless Container
 
 This project demonstrates how to create a **minimal isolated Linux process** using **multiple namespaces** in Go.
 It launches a child process that can run **any command** inside newly created namespaces, similar to how container runtimes (like Docker or runc) bootstrap containers.
-The program also implements a **pivot_root** operation to isolate the filesystem.
 
 ---
 
@@ -15,10 +14,9 @@ This Go program:
 * Creates **new Linux namespaces** for isolation
 * Maps the current user to **root inside the namespace** using user namespaces
 * Sets a **hostname** inside the child namespace
-* Changes the root filesystem of the child using **pivot_root**
-  (the child only sees the contents of `rootfs` after pivot)
+* Changes the root filesystem of the child using **`chroot`**
 
-The result is a command (e.g., shell) that behaves as **root** inside the isolated namespaces but is safely contained from the host system.
+The result is a command (e.g., shell) that behaves as **root inside the isolated namespaces** but is safely contained from the host system.
 
 ---
 
@@ -47,19 +45,26 @@ This allows the child process to:
 
 * Act as **root inside the namespace**
 * Remain **unprivileged on the host**
-* Safely create additional namespaces without compromising host security
+* Create namespaces **without requiring sudo**
+
+> ⚠️ Some kernel features (e.g., networking, certain mounts) still require `CAP_SYS_ADMIN` or elevated privileges.
 
 ---
 
-## Pivot Root (Filesystem Isolation)
+## Filesystem Isolation (chroot vs pivot_root)
 
-The child process performs a **pivot_root** into a `rootfs` directory:
+### Why `chroot` is used
 
-* The child sees `rootfs` as `/`
-* The original host root is hidden at `/.pivot_root` temporarily
-* After unmounting `/.pivot_root`, the host filesystem is no longer visible from inside the container
+This project uses **`chroot`** instead of `pivot_root` because:
 
-> ⚠️ Make sure `rootfs` contains the binaries you want to run (e.g., `/bin/sh` for BusyBox). Bash may not exist in minimal root filesystems.
+* `pivot_root` requires **CAP_SYS_ADMIN**, which is not available in rootless mode
+* It avoids permission errors when running rootless
+
+### Limitation of `chroot`
+
+* A privileged process can escape chroot using open file descriptors (if not careful)
+* `chroot` does not change mount points - it only changes the root directory
+* For full container isolation, **`pivot_root` + mount namespace** is preferred when CAP_SYS_ADMIN is available
 
 ---
 
@@ -69,12 +74,12 @@ The child process performs a **pivot_root** into a `rootfs` directory:
 Parent Go Process
 └─ exec /proc/self/exe "child" with namespace flags
    └─ Child sets hostname
-   └─ Performs pivot_root to rootfs
+   └─ Performs chroot to rootfs
    └─ Executes intended command (e.g., /bin/sh)
 ```
 
-* **Parent process:** sets up all namespace flags and UID/GID mappings
-* **Child process:** runs inside isolated namespaces, sets hostname, pivots root, and executes the command
+* **Parent process:** sets up namespace flags and UID/GID mappings
+* **Child process:** runs inside isolated namespaces, sets hostname, changes root, and executes the command
 
 ---
 
@@ -92,7 +97,7 @@ hostname      # shows "myhost"
 On the host:
 
 * Host processes and hostname remain unchanged
-* Host filesystem remains intact and isolated from child after pivot
+* Host filesystem remains isolated from the child
 
 ---
 
@@ -100,7 +105,7 @@ On the host:
 
 * Linux kernel with `unprivileged_userns_clone=1`
 * Go installed (Go 1.18+ recommended)
-* Root privileges are **optional**, but some operations (like mount or certain pivot_root setups) may require root
+* No root privileges required for this version
 
 ---
 
@@ -123,11 +128,10 @@ cd rootfs/bin && ./busybox --install .
 Run the program:
 
 ```bash
-sudo ./mynamespaces parent /bin/sh
+./mynamespaces parent /bin/sh
 ```
 
-* `parent` → triggers the parent process logic
-* `/bin/sh` → command executed inside isolated namespaces (use `/bin/sh` for BusyBox rootfs)
+> Use `/bin/sh` (BusyBox)- Bash may not exist in minimal root filesystems.
 
 ### 🍎 Running on macOS
 Since macOS doesn't support Linux namespaces, use Colima/Docker with this alias to cross-compile and run your code in a privileged Linux environment:
@@ -149,7 +153,7 @@ run-linux-go ./mynamespaces parent /bin/sh
 * Linux namespaces for process and resource isolation
 * User namespace with UID/GID mapping for rootless containers
 * Child process hostname isolation using UTS namespace
-* Filesystem isolation using **pivot_root**
+* Filesystem isolation using **chroot**
 * Running a shell or arbitrary command inside isolated namespaces
 
 ---
@@ -159,11 +163,8 @@ run-linux-go ./mynamespaces parent /bin/sh
 This program **does not**:
 
 * Set up networking namespaces
-* Mount `/proc` or `/sys` automatically
 * Apply cgroup-based resource limits
 * Provide a full container runtime
-
-It is intended **only as an educational example** for understanding Linux namespaces and minimal container isolation.
 
 ---
 
@@ -171,8 +172,6 @@ It is intended **only as an educational example** for understanding Linux namesp
 
 To extend this into a **full container runtime**, we will add:
 
-* Mount propagation and full filesystem setup (`/proc`, `/sys`)
-* Networking namespace and virtual interfaces
-* PID 1 signal handling for child processes
+* Networking namespace and virtual interfaces (veth, bridges)
+* PID 1 signal handling and reaping
 * Resource control using cgroups (CPU, memory, I/O)
-* Integration with a container image (like BusyBox or Alpine)
