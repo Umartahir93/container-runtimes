@@ -71,6 +71,10 @@ func child() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	// This line tells the new shell how to look:
+	// \u = username, \h = hostname, \w = current directory
+	cmd.Env = []string{"PS1=\\u@\\h:\\w# "}
+
 	// the command below sets the h to myhost. Idea here is to show use of UTS namespace.
 	err := syscall.Sethostname([]byte("myhost"))
 	if err != nil {
@@ -82,7 +86,7 @@ func child() {
 		fmt.Printf("E%s\n", err)
 	}
 
-	if err = pivotRoot(rootfs); err != nil {
+	if err = setupRoot(rootfs); err != nil {
 		fmt.Printf("pivot-root E%s\n", err)
 		os.Exit(1)
 	}
@@ -94,12 +98,44 @@ func child() {
 
 	err = cmd.Run()
 	if err != nil {
-		fmt.Printf("CMD %s\n", err)
+		fmt.Printf("E%s\n", err)
 	}
 
 }
 
-func pivotRoot(newRoot string) error {
+func setupRoot(newRoot string) error {
+	if err := syscall.Chroot(newRoot); err != nil {
+		return err
+	}
+	if err := os.Chdir("/"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func mountProc() error {
+	source := "proc"
+	target := "/proc"
+
+	if err := os.MkdirAll(target, 0755); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount(source, target, "proc", 0, ""); err != nil {
+		return err
+	}
+	return nil
+}
+
+/*
+	pivotRoot is commented out because it requires CAP_SYS_ADMIN, which is
+	not available in rootless user namespaces. Using pivot_root() would fail
+	with "operation not permitted" .
+
+	We use chroot() instead to allow rootless containers to run safely.
+	pivot_root() should be used only in rootful containers (with CAP_SYS_ADMIN)
+	because it provides stronger filesystem isolation than chroot().
+*/ /*func pivotRoot(newRoot string) error {
 	// Ensure new root is a mount point
 	if err := syscall.Mount(
 		newRoot,
@@ -138,18 +174,4 @@ func pivotRoot(newRoot string) error {
 	}
 
 	return nil
-}
-
-func mountProc() error {
-	source := "proc"
-	target := "/proc"
-
-	if err := os.MkdirAll(target, 0755); err != nil {
-		return err
-	}
-
-	if err := syscall.Mount(source, target, "proc", 0, ""); err != nil {
-		return err
-	}
-	return nil
-}
+}*/
