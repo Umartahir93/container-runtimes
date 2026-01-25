@@ -1,177 +1,102 @@
-# Minimal Rootless Container
+# Minimal Rootless Container with Networking
 
-This project demonstrates how to create a **minimal isolated Linux process** using **multiple namespaces** in Go.
-It launches a child process that can run **any command** inside newly created namespaces, similar to how container runtimes (like Docker or runc) bootstrap containers.
-
----
-
-## What This Program Does
-
-This Go program:
-
-* Acts as a **parent process** that sets up Linux namespaces
-* Re-executes itself to spawn a **child process** in the new namespaces
-* Creates **new Linux namespaces** for isolation
-* Maps the current user to **root inside the namespace** using user namespaces
-* Sets a **hostname** inside the child namespace
-* Changes the root filesystem of the child using **`chroot`**
-
-The result is a command (e.g., shell) that behaves as **root inside the isolated namespaces** but is safely contained from the host system.
+This project demonstrates how to build a **rootless Linux container from scratch** using Go. It achieves process isolation through namespaces and provides internet connectivity to the unprivileged container using user-mode networking.
 
 ---
 
-## Namespaces Used
+## 🚀 Key Features
 
-| Namespace                  | Purpose                                                    |
-| -------------------------- | ---------------------------------------------------------- |
-| **UTS** (`CLONE_NEWUTS`)   | Isolates hostname and domain name                          |
-| **PID** (`CLONE_NEWPID`)   | Provides a new process ID space (child process sees PID 1) |
-| **Mount** (`CLONE_NEWNS`)  | Gives a separate mount table                               |
-| **IPC** (`CLONE_NEWIPC`)   | Isolates System V IPC and POSIX message queues             |
-| **User** (`CLONE_NEWUSER`) | Allows UID/GID remapping (root inside namespace)           |
+* **Rootless Execution:** Runs entirely without `sudo` by leveraging User Namespaces.
+* **Process Isolation:** Uses 6 different Linux namespaces to "jail" the process.
+* **User-Mode Networking:** Provides full internet access inside the container using `slirp4netns`.
+* **Dynamic Synchronization:** Uses interface polling to ensure the network is ready before the containerized command executes.
 
 ---
 
-## User Namespace & UID/GID Mapping
+## 🛠 Namespaces Used
 
-The program maps:
-
-```text
-Container UID 0 (root)
-→ Host UID <current user>
-```
-
-This allows the child process to:
-
-* Act as **root inside the namespace**
-* Remain **unprivileged on the host**
-* Create namespaces **without requiring sudo**
-
-> ⚠️ Some kernel features (e.g., networking, certain mounts) still require `CAP_SYS_ADMIN` or elevated privileges.
+| Namespace | Flag | Purpose |
+| --- | --- | --- |
+| **User** | `CLONE_NEWUSER` | Maps your host user to `root` inside the container. |
+| **Network** | `CLONE_NEWNET` | Isolates the network stack (IPs, routes, etc.). |
+| **UTS** | `CLONE_NEWUTS` | Allows the container to have its own hostname. |
+| **PID** | `CLONE_NEWPID` | The containerized process thinks it is PID 1. |
+| **Mount** | `CLONE_NEWNS` | Provides a private mount table and `chroot` environment. |
+| **IPC** | `CLONE_NEWIPC` | Prevents the container from accessing host shared memory. |
 
 ---
 
-## Filesystem Isolation (chroot vs pivot_root)
+## 🌐 Networking Architecture
 
-### Why `chroot` is used
+Since an unprivileged user cannot create bridge interfaces on the host, this project uses **slirp4netns**.
 
-This project uses **`chroot`** instead of `pivot_root` because:
-
-* `pivot_root` requires **CAP_SYS_ADMIN**, which is not available in rootless mode
-* It avoids permission errors when running rootless
-
-### Limitation of `chroot`
-
-* A privileged process can escape chroot using open file descriptors (if not careful)
-* `chroot` does not change mount points - it only changes the root directory
-* For full container isolation, **`pivot_root` + mount namespace** is preferred when CAP_SYS_ADMIN is available
+1. The **Parent** spawns the child with a private Network Namespace.
+2. The **Parent** starts `slirp4netns` on the host, pointing it at the child's PID.
+3. `slirp4netns` creates a virtual `tap0` interface inside the container.
+4. The **Child** polls for `tap0`, brings up the `lo` (loopback) interface, and finally executes the shell.
 
 ---
 
-## How It Works (High-Level Flow)
+## 📋 Prerequisites
 
-```
-Parent Go Process
-└─ exec /proc/self/exe "child" with namespace flags
-   └─ Child sets hostname
-   └─ Performs chroot to rootfs
-   └─ Executes intended command (e.g., /bin/sh)
-```
-
-* **Parent process:** sets up namespace flags and UID/GID mappings
-* **Child process:** runs inside isolated namespaces, sets hostname, changes root, and executes the command
-
----
-
-## Example Behavior
-
-Inside the namespace shell:
-
+1. **Linux Kernel:** Must support unprivileged user namespaces.
+2. **slirp4netns:** Install via your package manager:
 ```bash
-whoami        # root
-id            # uid=0 (mapped from host user)
-ps            # PID 1 is the shell
-hostname      # shows "myhost"
+sudo apt install slirp4netns  # Ubuntu/Debian
+sudo dnf install slirp4netns  # Fedora
+
 ```
 
-On the host:
 
-* Host processes and hostname remain unchanged
-* Host filesystem remains isolated from the child
+3. **ICMP Permissions (Optional):** To allow `ping` to work rootless, run this on your host:
+```bash
+sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
+
+```
+
+
 
 ---
 
-## Requirements
+## 🏃 How to Run
 
-* Linux kernel with `unprivileged_userns_clone=1`
-* Go installed (Go 1.18+ recommended)
-* No root privileges required for this version
+1. **Prepare the Rootfs:**
+   Ensure you have a directory named `rootfs` with a basic Linux distribution (like Alpine) and a valid DNS config:
+```bash
+mkdir -p rootfs/etc
+echo "nameserver 8.8.8.8" > rootfs/etc/resolv.conf
+
+```
+
+
+2. **Build and Execute:**
+```bash
+go build -o gocontainer main.go
+./gocontainer parent /bin/sh
+
+```
+
+
+3. **Test Networking:**
+   Inside the container shell:
+```bash
+ip addr           # See tap0 and lo
+ping google.com # Verify internet access
+
+```
+---
+
+## ⚠️ Known Limitations
+
+* **Filesystem:** Uses `chroot` for simplicity. For better isolation, `pivot_root` is preferred but requires more complex mount setups in rootless mode.
+* **Resource Limits:** Currently, the container can consume unlimited CPU and RAM.
 
 ---
 
-## Build & Run
+## 🔜 Next Step: Resource Control (Cgroups v2)
 
-Build the program:
+The next phase of this project is implementing **Cgroups (Control Groups)**. This will allow us to:
 
-```bash
-go build -o mynamespaces
-```
-
-Prepare a minimal root filesystem (example with BusyBox):
-
-```bash
-mkdir -p rootfs/{bin,proc,sys,dev,tmp}
-cp /usr/bin/busybox rootfs/bin/
-cd rootfs/bin && ./busybox --install .
-```
-
-Run the program:
-
-```bash
-./mynamespaces parent /bin/sh
-```
-
-> Use `/bin/sh` (BusyBox)- Bash may not exist in minimal root filesystems.
-
-### 🍎 Running on macOS
-Since macOS doesn't support Linux namespaces, use Colima/Docker with this alias to cross-compile and run your code in a privileged Linux environment:
-
-```bash
-# Add this alias to your shell
-alias run-linux-go='GOOS=linux GOARCH=arm64 go build -o mynamespaces main.go && docker run --privileged -it -v $(pwd):/app -w /app golang:1.23'
-```
-
-```bash
-# Execute your container code
-run-linux-go ./mynamespaces parent /bin/sh
-```
-
----
-
-## Features Demonstrated
-
-* Linux namespaces for process and resource isolation
-* User namespace with UID/GID mapping for rootless containers
-* Child process hostname isolation using UTS namespace
-* Filesystem isolation using **chroot**
-* Running a shell or arbitrary command inside isolated namespaces
-
----
-
-## What This Program Does NOT Do
-
-This program **does not**:
-
-* Set up networking namespaces
-* Apply cgroup-based resource limits
-* Provide a full container runtime
-
----
-
-## Next Steps
-
-To extend this into a **full container runtime**, we will add:
-
-* Networking namespace and virtual interfaces (veth, bridges)
-* PID 1 signal handling and reaping
-* Resource control using cgroups (CPU, memory, I/O)
+* Limit Memory usage (e.g., "This container can only use 100MB RAM").
+* Limit CPU shares (e.g., "This container gets only 10% of the CPU").
+* Limit the number of processes (PIDs) to prevent fork bombs.
