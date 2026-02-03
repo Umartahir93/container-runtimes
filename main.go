@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -90,13 +92,17 @@ func child() {
 
 	exec.Command("ip", "link", "set", "lo", "up").Run()
 
+	err := enableCgroup()
+	if err != nil {
+		fmt.Printf("Error enabling cgroup: %v\n", err)
+	}
 	cmd := exec.Command(os.Args[2], os.Args[3:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = []string{"PS1=\\u@\\h:\\w# ", "PATH=/bin:/usr/bin:/sbin"}
 
-	err := waitForNetwork()
+	err = waitForNetwork()
 	if err != nil {
 		fmt.Printf("Network wait error: %v\n", err)
 	}
@@ -137,4 +143,19 @@ func waitForNetwork() error {
 		}
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func enableCgroup() error {
+	// path where your cgorup is mounted
+	cgroups := "/sys/fs/cgroup"
+	pids := filepath.Join(cgroups, "child")
+
+	if err := ioutil.WriteFile(filepath.Join(pids, "memory.max"), []byte("2M"), 0700); err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(pids, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700); err != nil {
+		return err
+	}
+	return nil
 }
