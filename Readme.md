@@ -1,102 +1,113 @@
-# Minimal Rootless Container with Networking
+# Minimal Rootless Container (Go)
 
-This project demonstrates how to build a **rootless Linux container from scratch** using Go. It achieves process isolation through namespaces and provides internet connectivity to the unprivileged container using user-mode networking.
+A lightweight, **rootless container runtime** written in Go. It demonstrates how to build a container from scratch using Linux Namespaces, Cgroups v2, and user-mode networking (`slirp4netns`).
 
 ---
 
 ## 🚀 Key Features
 
-* **Rootless Execution:** Runs entirely without `sudo` by leveraging User Namespaces.
-* **Process Isolation:** Uses 6 different Linux namespaces to "jail" the process.
-* **User-Mode Networking:** Provides full internet access inside the container using `slirp4netns`.
-* **Dynamic Synchronization:** Uses interface polling to ensure the network is ready before the containerized command executes.
+* **100% Rootless:** Runs as a standard user (UID 1000) mapped to `root` (UID 0) inside the container.
+* **Networking:** Full internet access using `slirp4netns` (no root bridges required).
+* **Resource Control:** Enforces a **2MB Memory Limit** using Cgroups v2.
+* **Architecture:** Pre-configured for ARM64 (Apple Silicon/Raspberry Pi) using the included `rootfs_arm`.
 
 ---
 
-## 🛠 Namespaces Used
+## 🛠 Dependencies
 
-| Namespace | Flag | Purpose |
-| --- | --- | --- |
-| **User** | `CLONE_NEWUSER` | Maps your host user to `root` inside the container. |
-| **Network** | `CLONE_NEWNET` | Isolates the network stack (IPs, routes, etc.). |
-| **UTS** | `CLONE_NEWUTS` | Allows the container to have its own hostname. |
-| **PID** | `CLONE_NEWPID` | The containerized process thinks it is PID 1. |
-| **Mount** | `CLONE_NEWNS` | Provides a private mount table and `chroot` environment. |
-| **IPC** | `CLONE_NEWIPC` | Prevents the container from accessing host shared memory. |
+Ensure you have these installed on your host before running:
 
----
-
-## 🌐 Networking Architecture
-
-Since an unprivileged user cannot create bridge interfaces on the host, this project uses **slirp4netns**.
-
-1. The **Parent** spawns the child with a private Network Namespace.
-2. The **Parent** starts `slirp4netns` on the host, pointing it at the child's PID.
-3. `slirp4netns` creates a virtual `tap0` interface inside the container.
-4. The **Child** polls for `tap0`, brings up the `lo` (loopback) interface, and finally executes the shell.
-
----
-
-## 📋 Prerequisites
-
-1. **Linux Kernel:** Must support unprivileged user namespaces.
-2. **slirp4netns:** Install via your package manager:
+1. **slirp4netns** (For networking)
 ```bash
-sudo apt install slirp4netns  # Ubuntu/Debian
-sudo dnf install slirp4netns  # Fedora
+sudo apt install slirp4netns
 
 ```
 
 
-3. **ICMP Permissions (Optional):** To allow `ping` to work rootless, run this on your host:
-```bash
-sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
-
-```
-
-
+2. **Go** (Golang 1.18+)
+3. **Cgroup v2** enabled kernel (Standard on Ubuntu 20.04+).
 
 ---
 
-## 🏃 How to Run
+## ⚙️ Configuration & Setup
 
-1. **Prepare the Rootfs:**
-   Ensure you have a directory named `rootfs` with a basic Linux distribution (like Alpine) and a valid DNS config:
+### 1. The Filesystem
+
+The project includes a `rootfs_arm` directory containing the Alpine Linux filesystem. **No download is required.**
+
+### 2. Cgroup Mount & Setup (Critical)
+
+You must manually mount the Cgroup v2 filesystem first, and then create the child directory inside it.
+
+Run these commands in your terminal (ensure the path matches the `cgroups` variable in your `main.go`):
+
 ```bash
-mkdir -p rootfs/etc
-echo "nameserver 8.8.8.8" > rootfs/etc/resolv.conf
+# 1. Create the mount point (Parent folder only)
+mkdir -p ~/Development/mygrp
+
+# 2. Mount Cgroup v2 (Requires sudo once)
+sudo mount -t cgroup2 none ~/Development/mygrp
+
+# 3. Enable Memory Controller (Crucial)
+# This allows sub-folders to actually restrict memory.
+echo "+memory" > ~/Development/mygrp/cgroup.subtree_control
+
+# 4. Create the 'child' folder inside the mount
+# The Go code expects this folder to exist!
+mkdir ~/Development/mygrp/child
+
+# 5. Take Ownership (Crucial for Rootless)
+# This ensures your Go program (running as User) can write to these files.
+sudo chown -R $USER:$USER ~/Development/mygrp
 
 ```
 
-
-2. **Build and Execute:**
-```bash
-go build -o gocontainer main.go
-./gocontainer parent /bin/sh
-
-```
-
-
-3. **Test Networking:**
-   Inside the container shell:
-```bash
-ip addr           # See tap0 and lo
-ping google.com # Verify internet access
-
-```
 ---
 
-## ⚠️ Known Limitations
+## 🏃 Usage
 
-* **Filesystem:** Uses `chroot` for simplicity. For better isolation, `pivot_root` is preferred but requires more complex mount setups in rootless mode.
-* **Resource Limits:** Currently, the container can consume unlimited CPU and RAM.
+Once the Cgroup directories are created, run the container:
+
+```bash
+# Syntax: go run main.go parent <command>
+go run main.go parent /bin/sh
+
+```
+
+You should see:
+
+```text
+Parent: Child PID is [PID]. Setting up slirp4netns...
+/ # 
+
+```
 
 ---
 
-## 🔜 Next Step: Resource Control (Cgroups v2)
+## 🧪 Verification
 
-The next phase of this project is implementing **Cgroups (Control Groups)**. This will allow us to:
+### 1. Test Networking
 
-* Limit Memory usage (e.g., "This container can only use 100MB RAM").
-* Limit CPU shares (e.g., "This container gets only 10% of the CPU").
-* Limit the number of processes (PIDs) to prevent fork bombs.
+Inside the container shell, try to reach the internet:
+
+```bash
+/ # ping -c 2 google.com
+PING google.com (142.250.x.x): 56 data bytes
+64 bytes from ...
+
+```
+
+## 🧩 How It Works
+
+1. **Parent Process:**
+* Sets up Namespaces (`CLONE_NEWUSER`, `CLONE_NEWNET`, etc.).
+* Maps Host UID -> Container Root.
+* Starts `slirp4netns` to provide internet connectivity.
+
+
+2. **Child Process:**
+* **Enables Cgroups:** Writes the limit to `.../child/memory.max`.
+* **Sets Hostname:** Changes hostname to `myhost`.
+* **Chroot:** Jails the file system into `./rootfs_arm`.
+* **Mounts /proc:** Required for process visibility.
+* **Waits for Network:** Polls `tap0` interface before running the user command.
