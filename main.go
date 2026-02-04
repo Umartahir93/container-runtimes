@@ -77,9 +77,14 @@ func setupNetworking(pid int) {
 }
 
 func child() {
+	err := enableCgroup()
+	if err != nil {
+		fmt.Printf("Error enabling cgroup: %v\n", err)
+	}
+
 	syscall.Sethostname([]byte("myhost"))
 
-	rootfs, _ := filepath.Abs("./rootfs")
+	rootfs, _ := filepath.Abs("./rootfs_arm")
 	if err := setupRoot(rootfs); err != nil {
 		fmt.Printf("Root setup error: %v\n", err)
 		os.Exit(1)
@@ -92,10 +97,6 @@ func child() {
 
 	exec.Command("ip", "link", "set", "lo", "up").Run()
 
-	err := enableCgroup()
-	if err != nil {
-		fmt.Printf("Error enabling cgroup: %v\n", err)
-	}
 	cmd := exec.Command(os.Args[2], os.Args[3:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -147,7 +148,7 @@ func waitForNetwork() error {
 
 func enableCgroup() error {
 	// path where your cgorup is mounted
-	cgroups := "/sys/fs/cgroup"
+	cgroups := "/home/umar-tahir/Development/mygrp"
 	pids := filepath.Join(cgroups, "child")
 
 	if err := ioutil.WriteFile(filepath.Join(pids, "memory.max"), []byte("2M"), 0700); err != nil {
